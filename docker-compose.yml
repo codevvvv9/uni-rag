@@ -39,6 +39,8 @@ services:
     volumes:
       - gsk_esdata01:/usr/share/elasticsearch/data
     env_file: .env
+    ports:
+      - "9200:9200"
     environment:
       - node.name=es01
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}

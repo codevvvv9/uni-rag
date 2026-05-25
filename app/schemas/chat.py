@@ -37,7 +37,7 @@ class AddDocsRequest(BaseModel):
 class AddDocsResponse(BaseModel):
     status: str
     message: str
-  
+
 # 在已经添加文档的会话上下文基础上，对用户信息进行分析，并返回回答结果
 class ChatRequest(BaseModel):
     message: str

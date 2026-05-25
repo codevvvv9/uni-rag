@@ -26,7 +26,15 @@ def get_chat_completion_block(session_id, question, references):
         formatted_references = "\n".join([f"[{ref['id']}] {ref['content']}" for ref in references])
     
         # 构造提示词
-        
+        prompt = f"""
+请根据下面的参考资料回答用户问题，并标注引用来源。
+
+参考资料：
+{formatted_references}
+
+用户问题：
+{question}
+"""
     
         # 调用模型生成回答
         completion = client.chat.completions.create(
