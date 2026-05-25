@@ -1,3 +1,4 @@
+from app.schemas.document_upload import SessionDocumentsResponse, DocumentUploadResponse, SessionDocumentsSummary
 from app.service.core.api.utils.file_utils import get_project_base_directory
 from service.quick_parse_service import quick_parse_service
 from service.document_upload_service import DocumentUploadService
@@ -334,4 +335,87 @@ async def upload_files(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"内部服务器错误: {str(e)}",
+        )
+        
+@router.get("/sessions/{session_id}/documents", response_model=SessionDocumentsResponse)
+async def get_session_documents(
+    session_id: str,
+    credentials: JwtAuthorizationCredentials = Security(access_security),
+    db: Session = Depends(get_db)
+):
+    """获取指定对话的所有文档上传记录"""
+    try:
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+        
+        # 获取会话中的所有文档记录
+        documents = DocumentUploadService.get_upload_records_by_session_id(session_id, db)
+        has_documents = len(documents) > 0
+        
+        return SessionDocumentsResponse(
+            session_id=session_id,
+            has_documents=has_documents,
+            documents=[
+                DocumentUploadResponse.from_orm(document) for document in documents    
+            ],
+            total_count=len(documents),
+        )
+    except HTTPException as e:
+        logger.error(f"获取会话文档信息失败: {str(e)}")
+        raise e
+    except Exception as e:
+        logger.exception(f"获取会话文档信息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+        
+@router.get(
+    "/sessions/{session_id}/documents/summary", 
+    response_model=SessionDocumentsSummary   
+)
+async def get_session_document_summary(
+    session_id: str,
+    credentials: JwtAuthorizationCredentials = Security(access_security),
+    db: Session = Depends(get_db)
+):
+    """获取指定对话的文档上传记录摘要"""
+    try:
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+        
+        # 检查是否有上传的文档
+        has_documents = DocumentUploadService.has_uploaded_documents(session_id, db)
+        
+        # 获取最新的文档信息
+        latest_document = DocumentUploadService.get_latest_document(session_id, db)
+        
+        # 获取总文档数量
+        all_documents = DocumentUploadService.get_upload_records_by_session_id(session_id, db)
+        total_documents = len(all_documents)
+        
+        return SessionDocumentsSummary(
+            session_id=session_id,
+            has_documents=has_documents,
+            latest_document_name=latest_document.document_name if latest_document else None,
+            latest_document_type=latest_document.document_type if latest_document else None,
+            latest_upload_time=latest_document.upload_time if latest_document else None,
+            total_documents=total_documents
+        )
+    except HTTPException as e:
+        logger.error(f"获取会话文档摘要失败: {str(e)}")
+        raise e        
+    except Exception as e:
+        logger.exception(f"获取会话文档摘要失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )

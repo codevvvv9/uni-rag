@@ -137,7 +137,7 @@ def generate_recommend_questions(
             except json.JSONDecodeError as e:
                 logger.error(f'JSON 解析错误，返回空列表，错误信息：{str(e)}')
                 logger.error(f'原始响应：{response}')
-                logger.error(f"清理后的响应内容：{ cleaned_response if 'clean_response' in locals() else "未处理"}")
+                logger.error(f"清理后的响应内容：{ cleaned_response if 'cleaned_response' in locals() else '未处理'}")
                 
         else:
             logger.warning(f'大模型没有返回任何选择')

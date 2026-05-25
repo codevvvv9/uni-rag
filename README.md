@@ -884,6 +884,7 @@ data: [DONE]
 
 ```bash
 docker compose up -d --build
+# docker compose up -d --build swxy_api 一般这个服务更新的多一些
 docker compose ps
 docker compose logs -f swxy_api
 ```
