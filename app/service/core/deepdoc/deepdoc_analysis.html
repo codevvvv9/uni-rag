@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepDOC 来源与目录拆解</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --panel: #fff;
+      --text: #20242a;
+      --muted: #606a76;
+      --line: #d9dee7;
+      --accent: #176d5d;
+      --link: #275f9f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+    header {
+      padding: 34px 28px 22px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+    h1, h2, h3 { margin: 0; line-height: 1.25; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 22px; margin-bottom: 12px; }
+    h3 { font-size: 17px; margin: 18px 0 8px; }
+    p { color: var(--muted); margin: 10px 0; }
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef2f6;
+      color: #1d3147;
+    }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .section {
+      margin-bottom: 22px;
+      padding: 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .note {
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: #edf7f4;
+      color: #24443e;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .mermaid {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      overflow: auto;
+    }
+    ul { padding-left: 22px; margin: 8px 0; }
+    li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DeepDOC 来源与目录拆解</h1>
+    <p>分析 <code>backend/app/service/core/deepdoc</code> 的来源证据、目录内容、模型依赖和面试讲法。</p>
+  </header>
+  <main>
+    <section class="section">
+      <h2>1. 来源结论</h2>
+      <div class="note">结论：该目录不是本项目纯手写模块，而是基于 InfiniFlow/RAGFlow 的 DeepDoc 代码迁移并适配到 <code>service.core</code>。</div>
+      <ul>
+        <li>源码文件头保留 <code>InfiniFlow Authors</code> 和 Apache-2.0 许可。</li>
+        <li>README 图片资源指向 <code>github.com/infiniflow/ragflow</code>。</li>
+        <li>类名保留 <code>RAGFlow*Parser</code> 命名。</li>
+        <li>模型仓库使用 <code>InfiniFlow/deepdoc</code> 与 <code>InfiniFlow/text_concat_xgb_v1.0</code>。</li>
+        <li>仓库历史中存在旧路径 <code>app/service/ragflow/deepdoc</code>。</li>
+      </ul>
+      <p>参考：<a href="https://github.com/infiniflow/ragflow/blob/main/deepdoc/README.md">RAGFlow DeepDoc README</a>，<a href="https://github.com/infiniflow/ragflow">RAGFlow GitHub</a>，<a href="https://pypi.org/project/deepdoc-pdfparser/">deepdoc_pdfparser PyPI</a>。</p>
+      <pre class="mermaid">
+flowchart TD
+  A["本地 deepdoc 目录"] --> B["InfiniFlow Authors 版权头"]
+  A --> C["Apache-2.0 License"]
+  A --> D["README 指向 infiniflow/ragflow"]
+  A --> E["RAGFlow*Parser 类名"]
+  A --> F["repo_id: InfiniFlow/deepdoc"]
+  A --> G["旧路径 app/service/ragflow/deepdoc"]
+  B --> H["上游 DeepDoc 迁移/适配"]
+  C --> H
+  D --> H
+  E --> H
+  F --> H
+  G --> H
+      </pre>
+    </section>
+
+    <section class="section">
+      <h2>2. 目录拆解</h2>
+      <pre class="mermaid">
+flowchart TD
+  A["deepdoc/"] --> B["README.md / README_zh.md"]
+  A --> C["parser/"]
+  A --> D["vision/"]
+  A --> E["__pycache__/"]
+  C --> F["pdf_parser.py"]
+  C --> G["docx / excel / ppt parser"]
+  C --> H["html / json / markdown / txt parser"]
+  C --> I["resume/"]
+  D --> J["ocr.py"]
+  D --> K["layout_recognizer.py"]
+  D --> L["table_structure_recognizer.py"]
+  D --> M["recognizer / operators / postprocess"]
+  D --> N["测试和可视化脚本"]
+      </pre>
+      <div class="grid">
+        <div>
+          <h3>Parser</h3>
+          <ul>
+            <li><code>pdf_parser.py</code>：OCR、版面、表格、坐标。</li>
+            <li><code>docx_parser.py</code>：段落、样式和表格。</li>
+            <li><code>excel_parser.py</code>：行列转文本或 HTML。</li>
+            <li><code>json_parser.py</code>：保持层级的 JSON 切块。</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Vision</h3>
+          <ul>
+            <li><code>ocr.py</code>：文本检测和识别。</li>
+            <li><code>layout_recognizer.py</code>：版面区域识别。</li>
+            <li><code>table_structure_recognizer.py</code>：表格结构识别。</li>
+            <li><code>recognizer.py</code>：排序、重叠匹配和清理。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3. Parser 与 Vision 链路</h2>
+      <pre class="mermaid">
+flowchart TD
+  A["PDF / 图片输入"] --> B["OCR.detect / OCR.recognize"]
+  A --> C["LayoutRecognizer"]
+  C --> D["Text / Title / Table / Figure 等版面"]
+  D --> E["TableStructureRecognizer"]
+  E --> F["行 / 列 / 表头 / 合并单元格"]
+  B --> G["Recognizer 通用后处理"]
+  D --> G
+  F --> G
+  G --> H["pdf_parser 合并文本、表格、图片和坐标"]
+      </pre>
+    </section>
+
+    <section class="section">
+      <h2>4. 模型资源依赖</h2>
+      <p><code>deepdoc</code> 代码依赖 <code>backend/app/service/core/rag/res/deepdoc</code> 中的 ONNX 和 XGBoost 模型；本地缺失时会尝试从 InfiniFlow 的 HuggingFace 仓库下载。</p>
+      <pre class="mermaid">
+flowchart LR
+  A["ocr.py"] --> B["det.onnx / rec.onnx / ocr.res"]
+  C["layout_recognizer.py"] --> D["layout*.onnx"]
+  E["table_structure_recognizer.py"] --> F["tsr.onnx"]
+  G["pdf_parser.py"] --> H["updown_concat_xgb.model"]
+  I["缺少本地模型"] --> J["InfiniFlow/deepdoc"]
+  I --> K["InfiniFlow/text_concat_xgb_v1.0"]
+      </pre>
+    </section>
+
+    <section class="section">
+      <h2>5. 适配痕迹与面试讲法</h2>
+      <div class="grid">
+        <div>
+          <h3>适配痕迹</h3>
+          <ul>
+            <li>主链路 import 已改为 <code>service.core.*</code>。</li>
+            <li>模型路径绑定到 <code>rag/res/deepdoc</code>。</li>
+            <li>部分 resume 和测试脚本仍保留上游式 import。</li>
+          </ul>
+        </div>
+        <div>
+          <h3>面试讲法</h3>
+          <ul>
+            <li>不是从零手写，是引入并适配 RAGFlow DeepDoc。</li>
+            <li>工程重点是接入统一解析、分块、向量化和 ES 入库链路。</li>
+            <li>核心价值是 OCR、版面识别和表格结构识别。</li>
+            <li>亮点是保留表格、图片、坐标，支持 RAG 引用定位。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, securityLevel: "loose", theme: "default" });
+  </script>
+</body>
+</html>

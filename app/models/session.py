@@ -10,4 +10,4 @@ class Session(Base):
     session_name = Column(String(255), nullable=False)
     user_id = Column(String(255), nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
-    create_time = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    updated_at = Column(TIMESTAMP, nullable=False, server_default=func.now()) 

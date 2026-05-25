@@ -85,6 +85,8 @@ services:
   redis:
     container_name: gsk_redis2
     image: redis:7-alpine
+    ports:
+    - "16379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
