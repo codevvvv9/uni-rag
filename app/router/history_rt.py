@@ -1,3 +1,4 @@
+from app.service.document_operations import delete_document
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Security, status
 )
@@ -158,6 +159,48 @@ async def get_sessions_by_user_id(
         return {"user_id": user_id, "sessions": sessions}
     except HTTPException as e:
         logger.error(f"获取会话信息失败: {str(e)}")
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+# 删除文档
+@router.delete("/delete_file/{file_name}")
+async def delete_document_endpoint(
+    file_name: str,
+    credentials: JwtAuthorizationCredentials = Security(access_security),
+    db: Session = Depends(get_db)
+):
+    try:
+        # URL解码文件名
+        decoded_file_name =unquote(file_name)
+        
+        # 从 token 中获取用户 ID
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+        
+        # 调用 service 层的删除方法
+        result = delete_document(
+            decoded_file_name,
+            user_id,
+            db
+        )
+        
+        if result["status"] == "error":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result["message"],
+            )
+        
+        return {"status": "success", "message": result['message']}
+    except HTTPException as e:
+        logger.error(f"删除文件失败: {str(e)}")
         raise e
     except Exception as e:
         raise HTTPException(

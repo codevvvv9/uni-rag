@@ -11,6 +11,7 @@
 - `app/router/chat_rt.py`: 会话、聊天、文件上传和会话文档接口。
 - `app/router/history_rt.py`: 历史消息、会话列表和知识库文件列表接口。
 - `app/service/`: 业务服务逻辑。
+- `app/service/document_operations.py`: 知识库文档删除服务，删除 ES chunk、本地文件和 PostgreSQL 元数据。
 - `app/schemas/`: Pydantic 请求和响应模型。
 - `app/models/`: SQLAlchemy ORM 模型。
 - `app/alembic/`: Alembic 数据库迁移配置和版本文件。

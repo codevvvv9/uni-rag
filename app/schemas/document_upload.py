@@ -11,8 +11,8 @@ class DocumentUploadResponse(BaseModel):
     document_type: str
     file_size: Optional[int]
     upload_time: datetime
-    create_time: datetime
-    update_time: datetime
+    created_at: datetime
+    updated_at: datetime
     class Config:
         from_attributes = True
         
