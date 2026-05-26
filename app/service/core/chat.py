@@ -33,9 +33,24 @@ def get_quick_parse_content(session_id: str) -> str:
         logger.error(f"从 Redis 获取快速解析内容失败: {str(e)}")
         return None
 
+
+def parse_recommended_questions_response(response_json) -> list[str]:
+    if isinstance(response_json, list):
+        response_json = response_json[0] if response_json else {}
+
+    if not isinstance(response_json, dict):
+        return []
+
+    recommended_questions = response_json.get("recommended_questions", [])
+    if not isinstance(recommended_questions, list):
+        return []
+
+    return [question for question in recommended_questions if isinstance(question, str) and question.strip()]
+
 # 根据用户提问问题，生成相关推荐问题
 def generate_recommend_questions(
     user_question: str, 
+    model_answer: str = "",
     retrieved_content: str = None, 
     session_id: str = None
 ) -> list[str]:
@@ -43,6 +58,7 @@ def generate_recommend_questions(
     根据用户提问生成相关推荐问题。
 
     :param user_question: 用户提问
+    :param model_answer: 本轮模型回答
     :param retrieved_content: 检索到的内容（可选，用于判断是否有相关文档）
     :param session_id: 会话ID（可选）
     :return: 推荐问题列表
@@ -59,23 +75,30 @@ def generate_recommend_questions(
         document_topics = document_names[:3]
     
     # 构造优化后的提示词
-    context_info = ''
+    context_info = '当前对话没有可用文档上下文。'
     if has_documents and document_topics:
         context_info = f"当前对话基于这些文档：{', '.join(document_topics)}"
-        
+
+    answer_info = model_answer.strip() if model_answer else "本轮回答为空或不可用。"
     
     prompt = f"""
-    你是一个智能助手，请基于用户的问题，生成3 个相关的推荐问题，帮助用户更深入的探索这个话题。
+    你是一个智能助手。请严格基于“本轮用户问题”和“本轮模型回答”生成 3 个后续推荐问题。
     
-    用户问题： f{user_question}
+    本轮用户问题：
+    {user_question}
+
+    本轮模型回答：
+    {answer_info}
     
+    文档上下文说明：
     {context_info}
     
     要求：
-    1. 生成的问题应该与用户问题相关，但从不同的角度深入
-    2. 问题要具体、有价值，能够吸引用户获得更多有用的信息
-    3. 如果有文档上下文，可以围绕文档主题生成相关问题
-    4. 返回 JSON 格式，包含 recommended_questions数组
+    1. 推荐问题必须紧扣本轮问题和本轮回答，不能引入回答中没有出现的新领域、新人物或新赛事。
+    2. 如果本轮问题很短或有歧义，优先生成澄清、定义、对比、应用场景类问题。
+    3. 如果有文档上下文，可以围绕文档主题继续追问，但不要臆造文档中没有的信息。
+    4. 每个问题必须具体、自然，适合用户直接点击继续追问。
+    5. 返回 JSON 格式，包含 recommended_questions 数组。
     
     输出格式：
     {{
@@ -86,7 +109,7 @@ def generate_recommend_questions(
         ]
     }}
     
-    请直接返回 JSON，不要包含其他问题
+    请直接返回 JSON，不要包含其他内容。
     """
     
     try:
@@ -125,7 +148,7 @@ def generate_recommend_questions(
                 
                 # 解析 JSON 响应
                 response_json = json.loads(cleaned_response)
-                recommended_questions = response_json.get("recommended_questions", [])
+                recommended_questions = parse_recommended_questions_response(response_json)
                 logger.info(f'解析后的推荐问题列表是: {recommended_questions}')
                 
                 # 验证推荐问题格式
@@ -289,7 +312,24 @@ def update_session_name(session_id: str, question: str, user_id: str, db: Sessio
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Update session name failed: {str(e)}")
-    
+
+
+def get_stream_delta(chunk):
+    choice = chunk.choices[0] if hasattr(chunk, "choices") else chunk["choices"][0]
+    finish_reason = (
+        choice.finish_reason
+        if hasattr(choice, "finish_reason")
+        else choice.get("finish_reason")
+    )
+    delta = choice.delta if hasattr(choice, "delta") else choice.get("delta", {})
+    content = delta.content if hasattr(delta, "content") else delta.get("content")
+    reasoning_content = (
+        getattr(delta, "reasoning_content", None)
+        if hasattr(delta, "reasoning_content")
+        else delta.get("reasoning_content")
+    )
+    return finish_reason, content, reasoning_content
+
 
 def get_chat_completion(session_id, question, retrieved_content, user_id, db: Session):
     """
@@ -434,11 +474,12 @@ def get_chat_completion(session_id, question, retrieved_content, user_id, db: Se
         recommended_questions = []  # 初始化推荐问题
         
         for chunk in completion:
-            if chunk["choices"][0]["finish_reason"] == "stop":
+            finish_reason, content, reasoning_content = get_stream_delta(chunk)
+            if finish_reason == "stop":
                 # 结束生成了，就生成推荐问题
                 try:
                     logger.info("开始生成推荐问题...")
-                    recommended_questions = generate_recommend_questions(question, retrieved_content, session_id)
+                    recommended_questions = generate_recommend_questions(question, model_answer, retrieved_content, session_id)
                     logger.info(f"推荐问题生成结果：{recommended_questions}")
                     
                     if recommended_questions:
@@ -467,23 +508,22 @@ def get_chat_completion(session_id, question, retrieved_content, user_id, db: Se
                 break
             else:
                 # 实时处理流式响应
-                delta = chunk["choices"][0]["delta"]
-                if delta.get("content"):
+                if content:
                     # 累加模型回答
-                    model_answer += delta["content"] # 累加大模型回答
+                    model_answer += content # 累加大模型回答
                     message = {
                         "role": "assistant",
-                        "content": delta["content"],
+                        "content": content,
                         "thinking": False,
                     }
                     json_message = json.dumps(message, ensure_ascii=False)
                     yield f"event: message\ndata: {json_message}\n\n"
-                else:
+                elif reasoning_content:
                     # 累加思考过程
-                    think += delta.reasoning_content
+                    think += reasoning_content
                     message = {
                         "role": "assistant",
-                        "content": delta.reasoning_content,
+                        "content": reasoning_content,
                         "thinking": True,
                     }
                     json_message = json.dumps(message, ensure_ascii=False)
