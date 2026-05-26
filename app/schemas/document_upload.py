@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 
 
-class DocumentUploadResponse:
+class DocumentUploadResponse(BaseModel):
     """文档上传记录响应模型"""
     id: int
     session_id: str
@@ -13,16 +13,16 @@ class DocumentUploadResponse:
     upload_time: datetime
     create_time: datetime
     update_time: datetime
-    
+    class Config:
+        from_attributes = True
+        
 # 会话文档信息响应模型
 class SessionDocumentsResponse(BaseModel):
+    """会话文档信息响应模型"""
     session_id: str
     has_documents: bool
     documents: List[DocumentUploadResponse]
-    file_size: Optional[int]
-    upload_time: datetime
-    created_at: datetime
-    updated_at: datetime
+    total_count: int
     # 允许 Pydantic 从任意对象的属性里读取数据，常用于 ORM 映射
     class Config:
         from_attributes = True

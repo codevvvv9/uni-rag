@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, Text, String, TIMESTAMP
+from sqlalchemy import Column, Text, String, TIMESTAMP, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from .base import Base
@@ -11,5 +12,7 @@ class Message(Base):
     session_id = Column(String(16), nullable=False)
     user_question = Column(Text, nullable=False)
     model_answer = Column(Text, nullable=False)
-    create_time = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     retrieval_content = Column(Text)
+    recommended_questions = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    think = Column(Text)

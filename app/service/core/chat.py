@@ -212,21 +212,36 @@ def write_chat_to_db(
     """
     
     try:
-        documents_json = json.dumps(retrieval_content, ensure_ascii=False)
+        retrieval_content_json = json.dumps(retrieval_content, ensure_ascii=False)
+        recommended_questions_json = json.dumps(recommended_questions or [], ensure_ascii=False)
         
         db.execute(
             text(
                 """
-                INSERT INTO messages (session_id, user_question, model_answer, documents, recommend_questions, think)
-                VALUES (:session_id, :user_question, :model_answer, :documents, :recommend_questions, :think)
+                INSERT INTO messages (
+                    session_id,
+                    user_question,
+                    model_answer,
+                    retrieval_content,
+                    recommended_questions,
+                    think
+                )
+                VALUES (
+                    :session_id,
+                    :user_question,
+                    :model_answer,
+                    :retrieval_content,
+                    CAST(:recommended_questions AS JSONB),
+                    :think
+                )
                 """
             ),
             {
                 "session_id": session_id,
                 "user_question": user_question,
                 "model_answer": model_answer,
-                "documents": documents_json,
-                "recommended_questions": recommended_questions,
+                "retrieval_content": retrieval_content_json,
+                "recommended_questions": recommended_questions_json,
                 "think": think,
             }
         )
@@ -416,19 +431,19 @@ def get_chat_completion(session_id, question, retrieved_content, user_id, db: Se
         # 处理流式响应
         model_answer = ""  # 初始化模型回答
         think = ""  # 初始化思考过程
-        recommend_questions = []  # 初始化推荐问题
+        recommended_questions = []  # 初始化推荐问题
         
         for chunk in completion:
             if chunk["choices"][0]["finish_reason"] == "stop":
                 # 结束生成了，就生成推荐问题
                 try:
                     logger.info("开始生成推荐问题...")
-                    recommend_questions = generate_recommend_questions(question, retrieved_content, session_id)
-                    logger.info(f"推荐问题生成结果：{recommend_questions}")
+                    recommended_questions = generate_recommend_questions(question, retrieved_content, session_id)
+                    logger.info(f"推荐问题生成结果：{recommended_questions}")
                     
-                    if recommend_questions:
+                    if recommended_questions:
                         message = {
-                            "recommend_questions": recommend_questions
+                            "recommended_questions": recommended_questions
                         }
                         json_message = json.dumps(message, ensure_ascii=False)
                         yield f"event: message\ndata: {json_message}\n\n"
@@ -438,14 +453,14 @@ def get_chat_completion(session_id, question, retrieved_content, user_id, db: Se
                         
                 except Exception as e:
                     logger.error(f"生成推荐问题失败：{str(e)}")
-                    recommend_questions = []
+                    recommended_questions = []
                 
                 # 结束时发送[DONE]事件
                 yield "event: end\ndata: [DONE]\n\n"
                 # 将对话数据写入数据库
                 logger.info("最终回答是: \n")
                 logger.info(model_answer)
-                write_chat_to_db(session_id, question, model_answer, retrieved_content, recommend_questions, think, db)
+                write_chat_to_db(session_id, question, model_answer, retrieved_content, recommended_questions, think, db)
                 
                 # 生成会话名称
                 update_session_name(session_id, question, user_id, db)

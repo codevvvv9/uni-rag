@@ -12,8 +12,51 @@ from typing import List
 from sqlalchemy import select, text
 from urllib.parse import unquote # 导入 URL 解码工具，用来把 % 开头的编码转成正常文字。
 from utils import logger
+import json
 
 router = APIRouter()
+
+@router.get("/get_files", response_model=List[FileResponse])
+async def get_documents_by_user_id(
+    credentials: JwtAuthorizationCredentials = Security(access_security),
+    db: Session = Depends(get_db)
+):
+    try:
+        # 从 token 中获取用户 ID
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+
+        # 查询 knowledgebase 表中对应的 user_id 的文件
+        files = db.execute(
+            select(KnowledgeBase).where(KnowledgeBase.user_id == user_id)
+        ).scalars().all()
+
+        # 如果没有找到文档，返回空列表
+        if not files:
+            return []
+        
+        return [
+            FileResponse(
+                user_id=file.user_id,
+                file_name=file.file_name,
+                created_at=file.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                updated_at=file.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            for file in files
+        ]
+    except HTTPException as e:
+        logger.error(f"获取文件列表失败: {str(e)}")
+        raise e
+    except Exception as e:
+        logger.exception(f"获取文件列表失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
 
 @router.get("/get_messages", response_model=List[MessageResponse])
 async def get_messages_by_session_id(
@@ -33,7 +76,18 @@ async def get_messages_by_session_id(
         messages_data: List[Row] = db.execute(
             text(
                 """
-                SELECT message_id, session_id, user_question, model_answer, documents, recommended_questions, think, created_at FROM messages WHERE session_id = :session_id"
+                SELECT
+                    message_id,
+                    session_id,
+                    user_question,
+                    model_answer,
+                    retrieval_content,
+                    recommended_questions,
+                    think,
+                    created_at
+                FROM messages
+                WHERE session_id = :session_id
+                ORDER BY created_at ASC
                 """
             ),
             {"session_id": session_id}
@@ -42,15 +96,22 @@ async def get_messages_by_session_id(
         # 构造返回数据
         messages: List[dict] = []
         for message in messages_data:
+            retrieval_content = message.retrieval_content
+            if isinstance(retrieval_content, str):
+                try:
+                    retrieval_content = json.loads(retrieval_content)
+                except json.JSONDecodeError:
+                    pass
+
             messages.append({
                 "message_id": message.message_id,
                 "session_id": message.session_id,
                 "user_question": message.user_question,
                 "model_answer": message.model_answer,
-                "documents": message.documents,
+                "retrieval_content": retrieval_content,
                 "recommended_questions": message.recommended_questions,
                 "think": message.think,
-                "created_at": message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                "created_at": message.created_at
             })
         
         return messages
@@ -77,7 +138,7 @@ async def get_sessions_by_user_id(
         sessions_data: List[Row] = db.execute(
             text(
                 """
-                SELECT * FROM sessions WHERE user_id = :user_id"
+                SELECT * FROM sessions WHERE user_id = :user_id
                 """
             ),
             {"user_id": user_id}

@@ -1,5 +1,5 @@
-from app.schemas.document_upload import SessionDocumentsResponse, DocumentUploadResponse, SessionDocumentsSummary
-from app.service.core.api.utils.file_utils import get_project_base_directory
+from schemas.document_upload import SessionDocumentsResponse, DocumentUploadResponse, SessionDocumentsSummary
+from service.core.api.utils.file_utils import get_project_base_directory
 from service.quick_parse_service import quick_parse_service
 from service.document_upload_service import DocumentUploadService
 from service.core.retrieval import retrieve_content
@@ -175,6 +175,7 @@ async def chat_on_docs(
     session_id: str = Query(...),
     request: ChatRequest = Body(..., description="用户消息"),
     credentials: JwtAuthorizationCredentials = Security(access_security),
+    db: Session = Depends(get_db),
 ):
     try:
         user_id = str(credentials.subject.get("user_id"))
@@ -207,7 +208,7 @@ async def chat_on_docs(
 
         # 返回流式响应
         return StreamingResponse(
-            get_chat_completion(session_id, question, references, user_id),
+            get_chat_completion(session_id, question, references, user_id, db=db),
             media_type="text/event-stream",
         )
 
@@ -275,7 +276,11 @@ async def upload_files(
         failed_files = []
         
         for file in files:
-            file_name = file.filename
+            file_name = os.path.basename(file.filename or "")
+            if not file_name:
+                failed_files.append("未知文件: 文件名不能为空")
+                continue
+
             file_path = os.path.join(session_dir, file_name)
             
             try:
@@ -287,13 +292,14 @@ async def upload_files(
                 
                 
                 # 对于 Excel 文件进行额外验证
-                if file_name.lower().endswith(".xlsx", ".xls"):
+                lower_file_name = file_name.lower()
+                if lower_file_name.endswith((".xlsx", ".xls")):
                     # 检查文件头， xlsx 文件应该是 zip 格式
-                    if file_name.lower().endswith(".xlsx"):
+                    if lower_file_name.endswith(".xlsx"):
                         if not file_content.startswith(b'PK'):
                             failed_files.append(f"{file_name}: 不是有效的 XLSX 文件格式，可能是 XLS 文件或文件已损坏")
                             continue
-                    elif file_name.lower().endswith(".xls"):
+                    elif lower_file_name.endswith(".xls"):
                         # XLS 文件有特定文件头 0xD0 0xCF 0x11 0xE0
                         if not (
                             file_content.startswith(b'\xD0\xCF\x11\xE0')
@@ -317,14 +323,36 @@ async def upload_files(
                 
                 # 尝试解析和插入文档
                 try:
-                    ...
+                    from service.core.file_parser import execute_insert_process
+
+                    execute_insert_process(file_path, file_name, user_id)
+                    knowledge_base = KnowledgeBase(
+                        user_id=user_id,
+                        file_name=file_name,
+                    )
+                    db.add(knowledge_base)
+                    db.commit()
+                    successful_files.append(file_name)
+                    logger.info(f"文件 {file_name} 处理完成并写入知识库")
                 except Exception as e:
-                    ...
+                    db.rollback()
+                    logger.exception(f"解析或入库文件 {file_name} 失败: {str(e)}")
+                    failed_files.append(f"{file_name}: {str(e)}")
+                    continue
 
             except Exception as e:
-                logger.error(f"处理文件 {file_name} 时发生错误: {str(e)}")
+                logger.exception(f"处理文件 {file_name} 时发生错误: {str(e)}")
                 failed_files.append(f"{file_name}: {str(e)}")
                 continue
+            
+        return {
+            "status": "success" if successful_files and not failed_files else "partial_success" if successful_files else "failed",
+            "successful_files": successful_files,
+            "failed_files": failed_files,
+            "total_count": len(files),
+            "success_count": len(successful_files),
+            "failed_count": len(failed_files),
+        }
             
         
     except HTTPException as e:
@@ -360,7 +388,7 @@ async def get_session_documents(
             session_id=session_id,
             has_documents=has_documents,
             documents=[
-                DocumentUploadResponse.from_orm(document) for document in documents    
+                DocumentUploadResponse.model_validate(document) for document in documents    
             ],
             total_count=len(documents),
         )

@@ -1,7 +1,7 @@
-from pydantic import BaseModel, UUID4
-from typing import Optional
+from pydantic import BaseModel, Field, UUID4
+from typing import Any, Optional
 from datetime import datetime
-from typing import List, Union
+from typing import List
 
 class MessageResponse(BaseModel):
     message_id: UUID4
@@ -9,12 +9,12 @@ class MessageResponse(BaseModel):
     user_question: str
     model_answer: str
     created_at: datetime
-    documents: Optional[Union[list, dict]] = None
-    recommend_questions: Optional[Union[list, dict]] = None
+    retrieval_content: Optional[Any] = None
+    recommended_questions: List[str] = Field(default_factory=list)
     think: Optional[str] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
         
 # 定义返回的文档类型
 class FileResponse(BaseModel):

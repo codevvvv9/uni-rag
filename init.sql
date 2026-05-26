@@ -19,9 +19,11 @@ CREATE TABLE IF NOT EXISTS messages (
     message_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id VARCHAR(16) NOT NULL,
     user_question TEXT NOT NULL,
-    model_question TEXT NOT NULL,
-    create_time TIMESTAMP NOT NULL DEFAULT now(),
-    retrieval_content TEXT
+    model_answer TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    retrieval_content TEXT,
+    recommended_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    think TEXT
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_bases (
